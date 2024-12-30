@@ -1,6 +1,8 @@
 from telebot import Telebot
 
+from telegram import TelegramError
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 import time
@@ -42,6 +44,12 @@ def check_tokens():
 @bot.message_handler(content_types=["text"])
 def send_message(bot, message):
     """отправляет сообщение в Telegram-чат"""
+    try:
+        bot.send_message(TELEGRAM_CHAT_ID, message)
+        logging.info("Сообщение отправлено.")
+    except TelegramError:
+        logging.error('Сообщение не было отправлено.')
+        raise TelegramError()
 
 
 def get_api_answer(timestamp):
@@ -65,12 +73,43 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Проверяет полученный ответ"""
+    logging.debug("Проверка ответа сервера")
+    if not response:
+        logging.error("Отсутствует ответ сервера")
+        raise TypeError()
+    if not isinstance(response, dict):
+        logging.error("Неверный формат ответа.")
+        raise TypeError()
+    if "homeworks" not in response:
+        logging.error("Ключа homeworks нет в ответе")
+        raise KeyError()
+    if "current_date" not in response:
+        logging.error("Ключа current_date нет в ответе")
+        raise KeyError()
+    if not isinstance(response.get("homeworks"), list):
+        logging.error("Неверный формат содержимого ключа homeworks.")
+        raise TypeError()
+    homeworks = response["homeworks"]
+    if homeworks:
+        return homeworks[0]
+    else:
+        logging.debug('Новых статусов нет')
+        return False
 
 
 def parse_status(homework):
     """Извлекает статус конкретной домашней работы"""
-
-    return f"Изменился статус проверки работы "{homework_name}". {verdict}"
+    logging.debug("Статус конкретной домашней работы")
+    if 'homework_name' in homework:
+        homework_name = homework['homework_name']
+    else:
+        raise KeyError('Отсутcтвует ключ "homework_name"')
+    try:
+        homework_status = homework['status']
+        verdict = HOMEWORK_VERDICTS[homework_status]
+    except KeyError as error:
+        logging.error(f"Отсутвует ключ: {error}")
+    return f"Изменился статус проверки работы '{homework_name}'. {verdict}"
 
 
 def main():
@@ -96,11 +135,12 @@ def main():
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s - %(name)s",
         handlers=[
-            logging.FileHandler(__file__ + ".log", encoding="UTF-8", mode="w"),
-            logging.StreamHandler(sys.stdout)
+            logging.StreamHandler(sys.stdout),
+            RotatingFileHandler(__file__ + ".log", maxBytes=50_000_000,
+                                backupCount=5, encoding="UTF-8")
         ]
     )
     main()
