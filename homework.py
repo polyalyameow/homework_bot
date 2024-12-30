@@ -4,11 +4,10 @@ import os
 import sys
 import time
 
+from dotenv import load_dotenv
 import requests
 import telebot
 from telebot.apihelper import ApiException
-
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -91,12 +90,13 @@ def parse_status(homework):
 def main():
     """Основная логика работы бота."""
     logging.info("Запускаем бот!")
+    bot = telebot.TeleBot(token=TELEGRAM_TOKEN)
     if not check_tokens():
+        send_message(bot, "Ошибка: отсутствуют необходимые токены.")
         logging.critical("Необходимые токены отсутствуют.")
         sys.exit(1)
 
     timestamp = int(time.time())
-    bot = telebot.TeleBot(token=TELEGRAM_TOKEN)
 
     while True:
         try:
