@@ -29,8 +29,18 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
-    return all(tokens)
+    tokens = [
+        ("PRACTICUM_TOKEN", PRACTICUM_TOKEN),
+        ("TELEGRAM_TOKEN", TELEGRAM_TOKEN),
+        ("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID),
+    ]
+
+    missing_tokens = [name for name, value in tokens if not value]
+    if missing_tokens:
+        for name in missing_tokens:
+            logging.critical(f"Отсутствует {name}")
+        return False
+    return True
 
 
 def send_message(bot, message):
@@ -39,25 +49,26 @@ def send_message(bot, message):
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.debug("Сообщение отправлено.")
     except ApiException as error:
-        logging.error(f"Ошибка при отправке сообщения: {error}")
+        logging.error(f"""
+                      Ошибка при отправке сообщения
+                      через Telegram API: {error}""")
+    except requests.exceptions.RequestException as req_error:
+        logging.error(f"Ошибка при выполнении запроса: {req_error}")
 
 
 def get_api_answer(timestamp):
     """Делает запрос к API."""
-    params = {'from_date': timestamp}
+    params = {"from_date": timestamp}
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         logging.debug(
             f"Запрос выполнен: URL={ENDPOINT}, "
             f"Хэдеры={HEADERS}, Параметры={params}")
-        if response.status_code != 200:
-            logging.error(
-                f"Ошибка при выполнении запроса к API: {response.status_code}")
-            raise RuntimeError(
-                f"HTTP {response.status_code}: {response.reason}")
     except requests.exceptions.RequestException as e:
-        logging.error(f"Ошибка при выполнении запроса к API: {e}")
         raise RuntimeError(f"Ошибка запроса: {e}")
+    if response.status_code != 200:
+        raise requests.exceptions.HTTPError(
+            f"HTTP {response.status_code}: {response.reason}")
     return response.json()
 
 
@@ -66,7 +77,7 @@ def check_response(response):
     logging.debug("Проверка ответа сервера")
     if not isinstance(response, dict):
         raise TypeError("Неверный формат ответа.")
-    if "homeworks" not in response or "current_date" not in response:
+    if "homeworks" not in response:
         raise KeyError(
             "Отсутствуют ключи homeworks или current_date в ответе API.")
     if not isinstance(response.get("homeworks"), list):
@@ -77,12 +88,16 @@ def check_response(response):
 def parse_status(homework):
     """Извлекает статус конкретной домашней работы."""
     logging.debug("Статус конкретной домашней работы")
-    if 'homework_name' not in homework:
-        raise KeyError('Отсутcтвует ключ "homework_name"')
-    homework_name = homework['homework_name']
-    homework_status = homework.get("status")
+    if not isinstance(homework, dict):
+        raise TypeError("Неверный формат ответа.")
+    if "homework_name" not in homework:
+        raise KeyError("Отсутcтвует ключ 'homework_name'")
+    if "status" not in homework:
+        raise KeyError("Отсутcтвует ключ 'status'")
+    homework_name = homework["homework_name"]
+    homework_status = homework["status"]
     if homework_status not in HOMEWORK_VERDICTS:
-        raise KeyError(f"Неизвестный статус работы: {homework_status}")
+        raise ValueError(f"Неизвестный статус работы: {homework_status}")
     verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -92,7 +107,6 @@ def main():
     logging.info("Запускаем бот!")
     bot = telebot.TeleBot(token=TELEGRAM_TOKEN)
     if not check_tokens():
-        send_message(bot, "Ошибка: отсутствуют необходимые токены.")
         logging.critical("Необходимые токены отсутствуют.")
         sys.exit(1)
 
@@ -105,9 +119,10 @@ def main():
             if homeworks:
                 message = parse_status(homeworks[0])
                 send_message(bot, message)
-            timestamp = response.get("current_date", timestamp)
+                timestamp = response.get("current_date", timestamp)
         except Exception as error:
             logging.error(f"Сбой в работе программы: {error}")
+            send_message(bot, f"Сбой в работе программы: {error}")
         time.sleep(RETRY_PERIOD)
 
 
@@ -121,4 +136,5 @@ if __name__ == "__main__":
                                 backupCount=5, encoding="UTF-8")
         ]
     )
+
     main()
