@@ -26,6 +26,8 @@ HOMEWORK_VERDICTS = {
     "rejected": "Работа проверена: у ревьюера есть замечания."
 }
 
+last_sent_message = None
+
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
@@ -45,9 +47,16 @@ def check_tokens():
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram-чат."""
+    global last_sent_message
+
+    if message == last_sent_message:
+        logging.debug("Сообщение не отправлено, оно совпадает с последним.")
+        return
+
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.debug("Сообщение отправлено.")
+        last_sent_message = message
     except ApiException as error:
         logging.error(f"""
                       Ошибка при отправке сообщения
