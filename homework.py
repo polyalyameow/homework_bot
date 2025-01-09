@@ -26,8 +26,6 @@ HOMEWORK_VERDICTS = {
     "rejected": "Работа проверена: у ревьюера есть замечания."
 }
 
-last_sent_message = None
-
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
@@ -47,22 +45,22 @@ def check_tokens():
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram-чат."""
-    global last_sent_message
-
+    last_sent_message = None
     if message == last_sent_message:
         logging.debug("Сообщение не отправлено, оно совпадает с последним.")
-        return
+        return last_sent_message
 
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.debug("Сообщение отправлено.")
-        last_sent_message = message
+        return message
     except ApiException as error:
         logging.error(f"""
                       Ошибка при отправке сообщения
                       через Telegram API: {error}""")
     except requests.exceptions.RequestException as req_error:
         logging.error(f"Ошибка при выполнении запроса: {req_error}")
+    return last_sent_message
 
 
 def get_api_answer(timestamp):
@@ -120,6 +118,7 @@ def main():
         sys.exit(1)
 
     timestamp = int(time.time())
+    last_sent_message = None
 
     while True:
         try:
@@ -127,11 +126,12 @@ def main():
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])
-                send_message(bot, message)
+                last_sent_message = send_message(bot, message)
                 timestamp = response.get("current_date", timestamp)
         except Exception as error:
             logging.error(f"Сбой в работе программы: {error}")
-            send_message(bot, f"Сбой в работе программы: {error}")
+            last_sent_message = send_message(
+                bot, f"Сбой в работе программы: {error}", last_sent_message)
         time.sleep(RETRY_PERIOD)
 
 
