@@ -29,27 +29,17 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    tokens = [
-        ("PRACTICUM_TOKEN", PRACTICUM_TOKEN),
-        ("TELEGRAM_TOKEN", TELEGRAM_TOKEN),
-        ("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID),
-    ]
+    tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
 
-    missing_tokens = [name for name, value in tokens if not value]
-    if missing_tokens:
-        for name in missing_tokens:
-            logging.critical(f"Отсутствует {name}")
-        return False
+    for token in tokens:
+        if not token:
+            logging.critical(f"Отсутствует {token}")
+            return False
     return True
 
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram-чат."""
-    last_sent_message = None
-    if message == last_sent_message:
-        logging.debug("Сообщение не отправлено, оно совпадает с последним.")
-        return last_sent_message
-
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.debug("Сообщение отправлено.")
@@ -58,9 +48,10 @@ def send_message(bot, message):
         logging.error(f"""
                       Ошибка при отправке сообщения
                       через Telegram API: {error}""")
+        return False
     except requests.exceptions.RequestException as req_error:
         logging.error(f"Ошибка при выполнении запроса: {req_error}")
-    return last_sent_message
+        return False
 
 
 def get_api_answer(timestamp):
@@ -118,7 +109,6 @@ def main():
         sys.exit(1)
 
     timestamp = int(time.time())
-    last_sent_message = None
 
     while True:
         try:
@@ -126,12 +116,12 @@ def main():
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])
-                last_sent_message = send_message(bot, message)
-                timestamp = response.get("current_date", timestamp)
+                if send_message(bot, message):
+                    timestamp = response.get("current_date", timestamp)
         except Exception as error:
             logging.error(f"Сбой в работе программы: {error}")
-            last_sent_message = send_message(
-                bot, f"Сбой в работе программы: {error}", last_sent_message)
+            send_message(
+                bot, f"Сбой в работе программы: {error}")
         time.sleep(RETRY_PERIOD)
 
 
