@@ -29,12 +29,20 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
+    tokens = {"PRACTICUM_TOKEN": PRACTICUM_TOKEN,
+              "TELEGRAM_TOKEN": TELEGRAM_TOKEN,
+              "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID}
 
-    for token in tokens:
-        if not token:
+    false_tokens = []
+
+    for name, token in tokens.items():
+        if token is None:
+            false_tokens.append(name)
+
+    if false_tokens:
+        for token in false_tokens:
             logging.critical(f"Отсутствует {token}")
-            return False
+        return False
     return True
 
 
@@ -109,6 +117,7 @@ def main():
         sys.exit(1)
 
     timestamp = int(time.time())
+    last_message = None
 
     while True:
         try:
@@ -116,12 +125,16 @@ def main():
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])
-                if send_message(bot, message):
-                    timestamp = response.get("current_date", timestamp)
+                if message != last_message:
+                    if send_message(bot, message):
+                        last_message = message
+                        timestamp = response.get("current_date", timestamp)
         except Exception as error:
             logging.error(f"Сбой в работе программы: {error}")
-            send_message(
-                bot, f"Сбой в работе программы: {error}")
+            error_message = f"Сбой в работе программы: {error}"
+            if error_message != last_message:
+                if send_message(bot, error_message):
+                    last_message = error_message
         time.sleep(RETRY_PERIOD)
 
 
